@@ -13,8 +13,33 @@ SkipList<T>::SkipList(int max_lvl) : max_lvl(max_lvl){
 }
 
 template<class T>
+void SkipList<T>::unlock(std::vector<node<T> *> *preds, int highestLocked) {
+    for (int level = 0; level <= highestLocked; level++) {
+        (*preds)[level]->unlock();
+    }
+}
+
+template<class T>
 bool SkipList<T>::okToDelete(node<T> *candidate, int found) {
     return (candidate->f_linked && candidate->top_level == found && !candidate->marked);
+}
+
+template<class T>
+bool SkipList<T>::find(T key) {
+    std::vector<node<T>*> preds(max_lvl + 1, nullptr), succs(max_lvl + 1, nullptr);
+    int found = find(key, &preds, &succs);
+    if (found == -1) { return false; }
+    node<T> *curr = head;
+    for (int level = max_lvl; level >= 0; level--){
+        while (curr->forward[level] != nullptr && key > curr->forward[level]->key){
+            curr = curr->forward[level];
+        }
+    }
+    curr = curr->forward[0];
+    if ( curr != nullptr && curr->key == key && succs[found]->f_linked && !succs[found]->marked)
+        return true;
+    else
+        return false;
 }
 
 template <class T>
@@ -64,9 +89,7 @@ bool SkipList<T>::insert(T key) {
             valid = !pred->marked && !succ->marked && pred->forward[level] == succ;
         }
         if (!valid) {
-            for (int level = 0; level <= highestLocked; level++) {
-                preds[level]->unlock();
-            }
+            unlock(&preds, highestLocked);
             continue;
         }
         node<T> *newNode = new node<T>(topLevel, key);
@@ -75,9 +98,7 @@ bool SkipList<T>::insert(T key) {
             preds[level]->forward[level] = newNode;
         }
         newNode->f_linked = true;
-        for (int level = 0; level <= highestLocked; level++) {
-            preds[level]->unlock();
-        }
+        unlock(&preds, highestLocked);
         return true;
     }
 }
@@ -87,7 +108,7 @@ bool SkipList<T>::remove(T key) {
     node<T> *nodeToDelete = nullptr;
     bool isMarked = false;
     int topLevel = -1;
-    std::vector<node<T>*> preds(max_lvl, nullptr), succs(max_lvl, nullptr);
+    std::vector<node<T>*> preds(max_lvl + 1, nullptr), succs(max_lvl + 1, nullptr);
     while (true){
         int found = find(key, &preds, &succs);
         if (isMarked || found != -1 && okToDelete(succs[found], found)){
@@ -117,19 +138,16 @@ bool SkipList<T>::remove(T key) {
                 valid = !pred->marked && pred->forward[level] == succ;
             }
             if (!valid) {
-                for (int level = 0; level <= highestLocked; level++) {
-                    preds[level]->unlock();
-                }
+                unlock(&preds, highestLocked);
                 continue;
             }
             for (int level = topLevel; level >= 0; level--){
                 preds[level]->forward[level] = nodeToDelete->forward[level];
             }
-            for (int level = 0; level <= highestLocked; level++) {
-                preds[level]->unlock();
-            }
+            unlock(&preds, highestLocked);
             return true;
-        } else return false;
+        } else
+            return false;
     }
 }
 
